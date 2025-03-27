@@ -23,6 +23,8 @@ class CatDetector:
         self.password = os.getenv('REOLINK_PASSWORD')
         self.api = Host(self.camera_ip, self.username, self.password)
         self.last_state = False
+        self.last_people = False
+        self.last_animal = False
         self.channel = 0  # La plupart des caméras utilisent le canal 0
 
     async def connect(self):
@@ -38,17 +40,24 @@ class CatDetector:
     async def start_monitoring(self):
         """Démarre la surveillance des événements de la caméra"""
         try:
+            people_state = False
+            animal_state = False
             while True:
-                # Vérification des événements toutes les 100ms
+                # Vérification des événements toutes les 500ms
                 motion_state = await self.api.get_motion_state(self.channel)
-                
-                # Si l'état a changé et qu'il y a du mouvement
-                if motion_state != self.last_state and motion_state:
-                    logger.info(f"Mouvement détecté ! Timestamp: {datetime.now()}")
-                    # TODO: Ajouter ici la capture d'image et l'envoi à Gemini
-                
+                ai_state = await self.api.get_ai_state(self.channel)
+
+                people_state = ai_state['people']
+                animal_state = ai_state['dog_cat']
+
+                if ((people_state and people_state != self.last_people) or (animal_state and animal_state != self.last_animal)):
+                    logger.info(f"Chat ou personne détecté ! Timestamp: {datetime.now()}")
+
+      
                 self.last_state = motion_state
-                await asyncio.sleep(0.1)  # Pause de 100ms
+                self.last_people = people_state
+                self.last_animal = animal_state
+                await asyncio.sleep(0.5)  # Pause de 500ms
 
         except Exception as e:
             logger.error(f"Erreur pendant la surveillance: {e}")
