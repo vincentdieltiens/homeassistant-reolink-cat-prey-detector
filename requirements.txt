@@ -1,3 +1,6 @@
 reolink-aio==0.13.0
-python-dotenv==1.1.0
-aiohttp==3.11.14 
+python-dotenv==1.0.0
+google-generativeai==0.3.2
+aiohttp==3.9.1
+# Si vous rencontrez des problèmes avec aiohttp, utilisez une version compatible avec votre Python
+# Pour Python 3.11+, la dernière version d'aiohttp devrait fonctionner 
