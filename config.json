@@ -29,10 +29,16 @@
   "hassio_role": "default",
   "ingress": true,
   "ingress_port": 8099,
+  "ingress_stream": true,
+  "ports": {
+    "8099/tcp": 8099
+  },
+  "ports_description": {
+    "8099/tcp": "Interface web"
+  },
   "panel_icon": "mdi:cat",
   "panel_title": "Détecteur de Chat",
   "map": ["share:rw", "media:rw"],
   "auth_api": true,
-  "services": ["notify"],
   "logger": true
 } 

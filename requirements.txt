@@ -3,6 +3,7 @@ python-dotenv==1.0.0
 google-generativeai==0.3.2
 aiohttp==3.9.1
 homeassistant-api==3.0.0
-flask==2.0.1
+flask==2.3.3
+werkzeug==2.3.7
 # Si vous rencontrez des problèmes avec aiohttp, utilisez une version compatible avec votre Python
 # Pour Python 3.11+, la dernière version d'aiohttp devrait fonctionner 

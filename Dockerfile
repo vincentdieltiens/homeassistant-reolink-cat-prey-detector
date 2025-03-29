@@ -12,7 +12,7 @@ COPY run.sh /app/
 # Rendre le script d'exécution exécutable
 RUN chmod +x /app/run.sh
 
-# Installer les dépendances Python
+# Installer les dépendances Python avec les versions spécifiques
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Créer les dossiers nécessaires
