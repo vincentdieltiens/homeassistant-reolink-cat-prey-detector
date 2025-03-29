@@ -228,7 +228,7 @@ class CatDetector:
 async def main():
     # Créer le détecteur avec le connecteur Gemini par défaut
     # Pour désactiver la sauvegarde des images, passer save_images=False
-    detector = CatDetector(save_images=False)
+    detector = CatDetector(save_images=True)
     try:
         await detector.connect()
         await detector.start_monitoring()
