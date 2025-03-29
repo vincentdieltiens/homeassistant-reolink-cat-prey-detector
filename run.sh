@@ -14,13 +14,11 @@ if [ ! -f "/app/server.py" ]; then
 fi
 
 # Créer les dossiers nécessaires
-mkdir -p /share/cat_detector/images
+mkdir -p /share
 mkdir -p /media/cat_detector
-mkdir -p /captures
 mkdir -p /config/www
 chmod -R 777 /share
 chmod -R 777 /media/cat_detector
-chmod -R 777 /captures
 chmod -R 777 /config/www
 
 # Configurer le logger pour écrire dans un fichier
@@ -33,45 +31,9 @@ WEB_LOG_FILE="/share/web_server_logs.txt"
 touch $WEB_LOG_FILE
 chmod 666 $WEB_LOG_FILE
 
-# Fonction pour créer des liens symboliques (uniquement si le fichier source existe)
-create_symlink() {
-    local source=$1
-    local target=$2
-    if [ -f "$source" ]; then
-        echo "Création du lien symbolique: $source -> $target"
-        ln -sf "$source" "$target"
-        return 0
-    fi
-    return 1
-}
-
-# Création de liens symboliques pour latest.jpg depuis tous les emplacements possibles vers www
-echo "Création des liens symboliques pour latest.jpg..."
-SYMLINK_CREATED=0
-
-# Essai 1: /media/cat_detector/latest.jpg (prioritaire)
-if create_symlink "/media/cat_detector/latest.jpg" "/config/www/cat_detector_latest.jpg"; then
-    SYMLINK_CREATED=1
-fi
-
-# Essai 2: /share/cat_detector/images/latest.jpg
-if [ $SYMLINK_CREATED -eq 0 ] && create_symlink "/share/cat_detector/images/latest.jpg" "/config/www/cat_detector_latest.jpg"; then
-    SYMLINK_CREATED=1
-fi
-
-# Essai 3: /share/cat_detector/latest.jpg
-if [ $SYMLINK_CREATED -eq 0 ] && create_symlink "/share/cat_detector/latest.jpg" "/config/www/cat_detector_latest.jpg"; then
-    SYMLINK_CREATED=1
-fi
-
-# Essai 4: /captures/latest.jpg
-if [ $SYMLINK_CREATED -eq 0 ] && create_symlink "/captures/latest.jpg" "/config/www/cat_detector_latest.jpg"; then
-    SYMLINK_CREATED=1
-fi
-
-if [ $SYMLINK_CREATED -eq 0 ]; then
-    echo "AVERTISSEMENT: Aucun fichier latest.jpg trouvé pour créer un lien symbolique"
-fi
+# Créer un lien symbolique de latest.jpg vers le dossier www
+echo "Création d'un lien symbolique pour latest.jpg..."
+ln -sf /media/cat_detector/latest.jpg /config/www/cat_detector_latest.jpg
 
 # Lancer le serveur web en arrière-plan mais avec redirection des logs
 echo "Démarrage du serveur web sur le port 8099..."
