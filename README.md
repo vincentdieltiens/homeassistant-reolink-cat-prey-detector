@@ -1,64 +1,48 @@
-# Cat Prey Detector
+# Détecteur de Chat
 
-Ce projet utilise une caméra Reolink pour détecter si un chat entre avec une proie via une chatière connectée, et verrouille la chatière si nécessaire.
+Un add-on Home Assistant pour détecter les chats et leurs proies en utilisant une caméra Reolink et l'API Google Gemini.
 
-## Prérequis
+## Fonctionnalités
 
-- Python 3.11 ou supérieur
-- Une caméra Reolink (testée avec RLC-510A)
-- Une chatière connectée SureFlap intégrée à Home Assistant
-- Home Assistant
+- Détection des chats grâce à la caméra Reolink
+- Prise de photos en rafale lorsqu'un chat est détecté
+- Analyse des images avec l'API Gemini pour identifier si le chat porte une proie
+- Déclenchement d'automatisations Home Assistant selon les résultats
+- Interface web pour visualiser les dernières images
+- Traitement asynchrone des images pour ne pas ralentir la détection
 
-## Installation
+## Configuration
 
-1. Cloner le repository :
-```bash
-git clone https://github.com/votre-username/cat-prey-detector.git
-cd cat-prey-detector
-```
+| Option | Description |
+|--------|-------------|
+| `camera_ip` | Adresse IP de la caméra Reolink |
+| `username` | Nom d'utilisateur pour la caméra |
+| `password` | Mot de passe pour la caméra |
+| `gemini_api_key` | Clé API pour Google Gemini |
+| `save_images` | Sauvegarder les images (true/false) |
+| `automation_with_prey` | ID de l'automatisation à déclencher quand un chat avec proie est détecté |
+| `automation_without_prey` | ID de l'automatisation à déclencher quand un chat sans proie est détecté |
+| `burst_count` | Nombre d'images à prendre en rafale (1-10) |
+| `burst_interval` | Intervalle entre les images en secondes (0.1-1.0) |
 
-2. Créer un environnement virtuel et l'activer :
-```bash
-python3 -m venv venv
-source venv/bin/activate  # Sur Linux/Mac
-# ou
-.\venv\Scripts\activate  # Sur Windows
-```
+## Fonctionnement du mode rafale
 
-3. Installer les dépendances :
-```bash
-pip install -r requirements.txt
-```
+Le système fonctionne comme suit :
+1. Quand un chat ou une personne est détecté par la caméra, le système prend plusieurs photos en rafale (configurable avec `burst_count`)
+2. Ces images sont mises en file d'attente pour être analysées par Gemini en arrière-plan
+3. Le système continue de surveiller immédiatement les nouveaux mouvements sans attendre l'analyse
+4. Gemini analyse l'ensemble des images pour déterminer si un chat avec proie est présent
+5. Si une proie est détectée, l'automatisation configurée est déclenchée
 
-4. Configurer les variables d'environnement :
-```bash
-cp .env.example .env
-```
-Puis éditer le fichier `.env` avec vos informations.
+Ce mode de fonctionnement permet :
+- D'augmenter les chances de capturer le chat avec sa proie clairement visible
+- De ne pas ralentir la détection pour les mouvements suivants
+- D'optimiser l'analyse en envoyant plusieurs images à Gemini en une seule fois
 
-## Utilisation
+## Visualisation des images
 
-Pour lancer le détecteur :
+L'interface web permet de voir les dernières images capturées et d'ouvrir chaque image en plein écran en cliquant dessus.
 
-```bash
-python detector.py
-```
+## Logs
 
-## Structure du projet
-
-- `detector.py` : Script principal de détection
-- `requirements.txt` : Liste des dépendances Python
-- `.env.example` : Exemple de configuration
-- `.gitignore` : Fichiers à ignorer par Git
-
-## Fonctionnement
-
-1. Le script se connecte à la caméra Reolink
-2. Il surveille en continu les mouvements détectés
-3. Lorsqu'un mouvement est détecté, il capture une image
-4. L'image est analysée par l'API Gemini pour détecter la présence d'une proie
-5. Si une proie est détectée, la chatière est verrouillée via Home Assistant
-
-## Contribution
-
-Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou une pull request. 
+Les logs sont disponibles dans `/share/cat_detector_logs.txt` et dans l'interface de logs de Home Assistant. 

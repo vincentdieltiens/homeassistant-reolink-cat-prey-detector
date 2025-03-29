@@ -1,19 +1,31 @@
 {
   "name": "Détecteur de Chat",
-  "version": "1.0.0",
+  "version": "0.2",
   "slug": "cat_detector",
-  "description": "Détecte les chats et leurs proies en utilisant l'API Gemini et une caméra Reolink",
+  "description": "Détecte les chats qui entrent avec des proies",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
   "startup": "application",
   "boot": "auto",
+  "ingress": true,
+  "ingress_port": 8099,
+  "ingress_stream": true,
+  "panel_icon": "mdi:cat",
+  "homeassistant_api": true,
+  "hassio_api": true,
+  "hassio_role": "default",
+  "auth_api": true,
+  "logger": true,
+  "map": ["share:rw", "media:rw"],
   "options": {
-    "camera_ip": "",
-    "username": "",
+    "camera_ip": "192.168.1.x",
+    "username": "admin",
     "password": "",
     "gemini_api_key": "",
     "save_images": true,
     "automation_with_prey": "",
-    "automation_without_prey": ""
+    "automation_without_prey": "",
+    "burst_count": 3,
+    "burst_interval": 0.3
   },
   "schema": {
     "camera_ip": "str",
@@ -22,23 +34,16 @@
     "gemini_api_key": "password",
     "save_images": "bool",
     "automation_with_prey": "str?",
-    "automation_without_prey": "str?"
+    "automation_without_prey": "str?",
+    "burst_count": "int(1,10)",
+    "burst_interval": "float(0.1,1.0)"
   },
-  "homeassistant_api": true,
-  "hassio_api": true,
-  "hassio_role": "default",
-  "ingress": true,
-  "ingress_port": 8099,
-  "ingress_stream": true,
   "ports": {
     "8099/tcp": 8099
   },
   "ports_description": {
     "8099/tcp": "Interface web"
   },
-  "panel_icon": "mdi:cat",
-  "panel_title": "Détecteur de Chat",
-  "map": ["share:rw", "media:rw"],
-  "auth_api": true,
-  "logger": true
+  "webui": "http://[HOST]:[PORT:8099]",
+  "init": false
 } 
