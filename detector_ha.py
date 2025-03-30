@@ -300,8 +300,11 @@ class GeminiConnector(AIConnector):
                     # Fallback à l'analyse individuelle
                     return await super().analyze_image_burst(image_data_list)
                 
-                # Vérifier que l'index est valide
-                if result["best_image_index"] >= len(image_data_list) or result["best_image_index"] < 0:
+                # Vérifier que l'index est valide (et pas None)
+                if result["best_image_index"] is None:
+                    logger.warning("L'index de la meilleure image est None, utilisation de l'index 0 par défaut")
+                    result["best_image_index"] = 0
+                elif result["best_image_index"] >= len(image_data_list) or result["best_image_index"] < 0:
                     logger.warning(f"Index d'image invalide: {result['best_image_index']}")
                     result["best_image_index"] = 0
                     
