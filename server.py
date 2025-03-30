@@ -4,9 +4,10 @@ import glob
 import json
 import logging
 from datetime import datetime
-from flask import Flask, render_template_string, send_from_directory, redirect, url_for
+from flask import Flask, render_template_string, send_from_directory, redirect, url_for, request
 import sys
 from logging.handlers import RotatingFileHandler
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Configuration du logger
 log_file = "/share/cat_detector_logs.txt"
@@ -40,6 +41,25 @@ except Exception as e:
     BURST_INTERVAL = 0.3
 
 app = Flask(__name__)
+
+# Support pour le proxy Ingress de Home Assistant
+app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
+
+# Classe pour configurer les URLs avec le préfixe d'ingress
+class IngressMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        # Détecte le préfixe d'ingress depuis l'en-tête X-Ingress-Path
+        ingress_path = environ.get('HTTP_X_INGRESS_PATH', '')
+        if ingress_path:
+            environ['SCRIPT_NAME'] = ingress_path
+            logger.info(f"Ingress détecté: {ingress_path}")
+        return self.app(environ, start_response)
+
+# Appliquer le middleware d'ingress
+app.wsgi_app = IngressMiddleware(app.wsgi_app)
 
 # Template HTML principal
 HTML_TEMPLATE = """
@@ -194,7 +214,7 @@ HTML_TEMPLATE = """
                 {% for image in images %}
                     <div class="image-card">
                         <a href="{{ url_for('view_image', filename=image.filename) }}">
-                            <img src="{{ url_for('serve_image', filename=image.filename) }}" alt="Photo de chat">
+                            <img src="{{ url_for('serve_image', filename=image.filename) }}" alt="Photo de chats">
                         </a>
                         <div class="image-info">
                             <p class="timestamp">{{ image.date }}</p>
@@ -323,6 +343,11 @@ VIEW_TEMPLATE = """
 def index():
     """Route principale affichant les images récentes"""
     try:
+        # Récupérer le préfixe d'ingress et le logger
+        ingress_path = request.headers.get('X-Ingress-Path', '')
+        if ingress_path:
+            logger.info(f"En-tête X-Ingress-Path trouvé: {ingress_path}")
+        
         # Trouver toutes les images
         image_files = []
         for ext in ['jpg', 'jpeg', 'png']:
@@ -382,6 +407,11 @@ def index():
 @app.route('/view/<path:filename>')
 def view_image(filename):
     """Afficher une image en plein écran"""
+    # Récupérer le préfixe d'ingress pour le logging
+    ingress_path = request.headers.get('X-Ingress-Path', '')
+    if ingress_path:
+        logger.info(f"[view_image] En-tête X-Ingress-Path trouvé: {ingress_path}")
+    
     return render_template_string(VIEW_TEMPLATE, filename=filename)
 
 # Fonction utilitaire pour rechercher une image dans tous les dossiers possibles
@@ -424,6 +454,11 @@ def find_image_path(filename):
 @app.route('/images/<path:filename>')
 def serve_image(filename):
     """Servir les images depuis le répertoire d'images"""
+    # Récupérer le préfixe d'ingress pour le logging
+    ingress_path = request.headers.get('X-Ingress-Path', '')
+    if ingress_path:
+        logger.info(f"[serve_image] En-tête X-Ingress-Path trouvé: {ingress_path}, servant l'image: {filename}")
+    
     directory, file_to_serve = find_image_path(filename)
     if directory and file_to_serve:
         return send_from_directory(directory, file_to_serve)
@@ -434,6 +469,11 @@ def serve_image(filename):
 @app.route('/latest.jpg')
 def latest_image():
     """Route directe pour servir latest.jpg"""
+    # Récupérer le préfixe d'ingress pour le logging
+    ingress_path = request.headers.get('X-Ingress-Path', '')
+    if ingress_path:
+        logger.info(f"[latest_image] En-tête X-Ingress-Path trouvé: {ingress_path}")
+    
     directory, file_to_serve = find_image_path('latest.jpg')
     if directory and file_to_serve:
         return send_from_directory(directory, file_to_serve)
@@ -477,6 +517,8 @@ if __name__ == '__main__':
         
         # Log de démarrage
         app.logger.info("Démarrage du serveur Flask sur 0.0.0.0:8099")
+        app.logger.info("Support pour Home Assistant Ingress activé - URLs adaptés automatiquement")
+        app.logger.info("Les URLs d'images utiliseront le préfixe d'ingress quand nécessaire")
 
         # Démarrer le serveur
         app.run(host='0.0.0.0', port=8099, debug=False, use_reloader=False, threaded=True)
