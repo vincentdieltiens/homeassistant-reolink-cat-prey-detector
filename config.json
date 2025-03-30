@@ -1,6 +1,6 @@
 {
   "name": "Détecteur de Chat",
-  "version": "1.0.0",
+  "version": "0.4",
   "slug": "cat_detector",
   "description": "Détecte les chats et leurs proies en utilisant l'API Gemini et une caméra Reolink",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
@@ -41,4 +41,4 @@
   "map": ["share:rw", "media:rw"],
   "auth_api": true,
   "logger": true
-} 
+}
