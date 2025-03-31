@@ -359,9 +359,9 @@ VIEW_TEMPLATE = """
     
     <div class="image-info">
         <p>{{ filename }}</p>
-        {% if 'cat_with_prey' in filename %}
+        {% if detection_type == 'cat_with_prey' %}
             <p class="cat-with-prey">Chat avec proie</p>
-        {% elif 'cat' in filename %}
+        {% elif detection_type == 'cat' %}
             <p class="cat">Chat sans proie</p>
         {% else %}
             <p>Mouvement détecté</p>
@@ -585,7 +585,10 @@ def index():
             
             # Format 1: type_best_groupid_seqX.jpg
             if len(parts) >= 4 and 'best' in parts and any(p.startswith('seq') for p in parts):
-                detection_type = parts[0] if parts[0] in ['cat', 'cat_with_prey'] else None
+                if parts[0] == 'cat_with_prey':
+                    detection_type = 'cat_with_prey'
+                elif parts[0] == 'cat':
+                    detection_type = 'cat'
                 is_best = 'best' in parts
                 
                 # Trouver le group_id (la partie avant seq)
@@ -596,7 +599,10 @@ def index():
             
             # Format 2: type_groupid_seqX.jpg
             elif len(parts) >= 3 and any(p.startswith('seq') for p in parts):
-                detection_type = parts[0] if parts[0] in ['cat', 'cat_with_prey'] else None
+                if parts[0] == 'cat_with_prey':
+                    detection_type = 'cat_with_prey'
+                elif parts[0] == 'cat':
+                    detection_type = 'cat'
                 
                 # Trouver le group_id (la partie avant seq)
                 seq_index = next((i for i, p in enumerate(parts) if p.startswith('seq')), None)
@@ -606,9 +612,19 @@ def index():
             
             # Format 3: Pour l'ancien format (type_timestamp.jpg)
             elif len(parts) == 2:
-                detection_type = parts[0] if parts[0] in ['cat', 'cat_with_prey'] else None
+                if parts[0] == 'cat_with_prey':
+                    detection_type = 'cat_with_prey'
+                elif parts[0] == 'cat':
+                    detection_type = 'cat'
                 group_id = parts[1]  # Timestamp sert de group_id
                 is_best = True  # Considéré comme la meilleure image
+            
+            # Si le type de détection n'a pas été trouvé dans le nom, vérifier à nouveau le nom complet
+            if not detection_type:
+                if 'cat_with_prey' in filename:
+                    detection_type = 'cat_with_prey'
+                elif filename.startswith('cat_') or '_cat_' in filename:
+                    detection_type = 'cat'
             
             # Si group_id n'a pas été trouvé, utiliser le nom du fichier comme fallback
             if not group_id:
@@ -684,7 +700,14 @@ def view_image(filename):
     if ingress_path:
         logger.info(f"[view_image] En-tête X-Ingress-Path trouvé: {ingress_path}")
     
-    return render_template_string(VIEW_TEMPLATE, filename=filename)
+    # Déterminer le type de détection à partir du nom de fichier
+    detection_type = None
+    if 'cat_with_prey' in filename:
+        detection_type = 'cat_with_prey'
+    elif filename.startswith('cat_') or '_cat_' in filename:
+        detection_type = 'cat'
+    
+    return render_template_string(VIEW_TEMPLATE, filename=filename, detection_type=detection_type)
 
 @app.route('/view_group/<group_id>')
 def view_group(group_id):
@@ -729,7 +752,7 @@ def view_group(group_id):
             detection_type = None
             if 'cat_with_prey' in filename:
                 detection_type = 'cat_with_prey'
-            elif 'cat_' in filename:
+            elif filename.startswith('cat_') or '_cat_' in filename:
                 detection_type = 'cat'
             
             group_images.append({
