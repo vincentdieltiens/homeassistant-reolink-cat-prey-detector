@@ -4,7 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import json
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import aiohttp
 from reolink_aio.api import Host
@@ -14,6 +14,8 @@ import google.generativeai as genai
 import threading
 import queue
 import uuid
+import time
+import glob
 
 # Configuration du logger pour écrire dans un fichier
 log_file = "/share/cat_detector_logs.txt"
@@ -54,6 +56,7 @@ try:
     AUTOMATION_WITHOUT_PREY = options.get('automation_without_prey', '')
     BURST_COUNT = options.get('burst_count', 3)  # Nouveau paramètre: nombre d'images en rafale
     BURST_INTERVAL = options.get('burst_interval', 0.3)  # Nouvel intervalle entre les photos en secondes
+    RETENTION_DAYS = options.get('retention_days', 7)  # Nouveau paramètre: rétention des images en jours
     
     # Vérifier les options obligatoires
     missing_fields = []
@@ -364,30 +367,56 @@ class ImageAnalysisWorker:
                 
                 # Traiter les résultats
                 best_index = result.get("best_image_index", 0)
-                if best_index >= 0 and best_index < len(task.image_data_list):
-                    best_image = task.image_data_list[best_index]
-                    
-                    # Sauvegarder la meilleure image
-                    if self.detector.save_images:
-                        detection_type = None
-                        if result["cat"]:
-                            if result["prey"]:
-                                detection_type = "cat_with_prey"
-                            else:
-                                detection_type = "cat"
-                        
-                        await self.detector.save_snapshot(best_image, detection_type)
-                    
-                    # Déclencher les automatisations appropriées
+                
+                # Vérifier que best_index est valide
+                if best_index is None or best_index < 0 or best_index >= len(task.image_data_list):
+                    logger.warning(f"Index invalide: {best_index}, utilisation de l'index 0")
+                    best_index = 0
+                
+                # Sauvegarder toutes les images de la rafale
+                if self.detector.save_images:
+                    detection_type = None
                     if result["cat"]:
                         if result["prey"]:
-                            logger.info("🐱 ALERTE: Chat détecté avec une proie ! 🐭")
-                            await self.detector.trigger_home_assistant_automation(AUTOMATION_WITH_PREY)
+                            detection_type = "cat_with_prey"
                         else:
-                            logger.info("🐱 Chat détecté sans proie")
-                            await self.detector.trigger_home_assistant_automation(AUTOMATION_WITHOUT_PREY)
+                            detection_type = "cat"
+                    
+                    # Créer un identifiant unique de groupe pour cette rafale
+                    group_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    
+                    # Sauvegarder chaque image avec le même group_id
+                    # L'image "best" est indiquée dans le nom de fichier
+                    for i, image_data in enumerate(task.image_data_list):
+                        is_best = (i == best_index)
+                        await self.detector.save_snapshot(
+                            image_data, 
+                            detection_type, 
+                            group_id=group_id, 
+                            is_best=is_best, 
+                            sequence_index=i
+                        )
+                    
+                    # Une fois les nouvelles images sauvegardées, nettoyer les anciennes images
+                    # selon la politique de rétention
+                    await self.detector.clean_old_images()
+                    
+                    # Sauvegarder également la meilleure image comme latest.jpg pour HA
+                    best_image = task.image_data_list[best_index]
+                    latest_path = self.detector.images_dir / "latest.jpg"
+                    with open(latest_path, "wb") as f:
+                        f.write(best_image)
+                
+                # Déclencher les automatisations appropriées
+                if result["cat"]:
+                    if result["prey"]:
+                        logger.info("🐱 ALERTE: Chat détecté avec une proie ! 🐭")
+                        await self.detector.trigger_home_assistant_automation(AUTOMATION_WITH_PREY)
                     else:
-                        logger.info("Aucun chat détecté dans les images")
+                        logger.info("🐱 Chat détecté sans proie")
+                        await self.detector.trigger_home_assistant_automation(AUTOMATION_WITHOUT_PREY)
+                else:
+                    logger.info("Aucun chat détecté dans les images")
                 
             except Exception as e:
                 logger.error(f"Erreur lors du traitement d'une tâche d'analyse: {e}")
@@ -409,7 +438,7 @@ class ImageAnalysisWorker:
 
 
 class CatDetector:
-    def __init__(self, camera_ip, username, password, ai_connector, save_images=True, burst_count=3, burst_interval=0.3):
+    def __init__(self, camera_ip, username, password, ai_connector, save_images=True, burst_count=3, burst_interval=0.3, retention_days=7):
         self.camera_ip = camera_ip
         self.username = username
         self.password = password
@@ -424,6 +453,9 @@ class CatDetector:
         # Paramètres pour la prise de photos en rafale
         self.burst_count = burst_count
         self.burst_interval = burst_interval
+        
+        # Paramètre de rétention des images
+        self.retention_days = retention_days
         
         # Créer le dossier pour les captures si nécessaire
         if self.save_images:
@@ -473,26 +505,51 @@ class CatDetector:
         
         return images
             
-    async def save_snapshot(self, image_data, detection_type=None):
-        """Sauvegarde les données d'une image"""
+    async def save_snapshot(self, image_data, detection_type=None, group_id=None, is_best=False, sequence_index=None):
+        """
+        Sauvegarde les données d'une image
+        
+        Args:
+            image_data (bytes): Données binaires de l'image
+            detection_type (str, optional): Type de détection (cat, cat_with_prey, etc.)
+            group_id (str, optional): Identifiant de groupe pour les images en rafale
+            is_best (bool, optional): Indique si c'est la meilleure image du groupe
+            sequence_index (int, optional): Index de l'image dans la séquence
+            
+        Returns:
+            str: Chemin du fichier sauvegardé ou None en cas d'erreur
+        """
         try:
             # Créer un nom de fichier avec horodatage
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{timestamp}.jpg"
             
-            # Ajouter un préfixe si un type de détection est fourni
+            # Utiliser group_id s'il est fourni, sinon utiliser timestamp
+            group_id = group_id or timestamp
+            
+            # Construire le nom de fichier
+            filename_parts = []
+            
+            # Ajouter le type de détection
             if detection_type:
-                filename = f"{detection_type}_{filename}"
-                
+                filename_parts.append(detection_type)
+            
+            # Ajouter l'indication si c'est la meilleure image
+            if is_best:
+                filename_parts.append("best")
+            
+            # Ajouter l'identifiant de groupe
+            filename_parts.append(group_id)
+            
+            # Ajouter l'index de séquence s'il est fourni
+            if sequence_index is not None:
+                filename_parts.append(f"seq{sequence_index}")
+            
+            # Combiner tous les éléments du nom de fichier
+            filename = "_".join(filename_parts) + ".jpg"
             filepath = self.images_dir / filename
-            latest_path = self.images_dir / "latest.jpg"
             
             # Enregistrer l'image
             with open(filepath, "wb") as f:
-                f.write(image_data)
-                
-            # Également sauvegarder comme latest.jpg pour HA
-            with open(latest_path, "wb") as f:
                 f.write(image_data)
             
             logger.info(f"Image sauvegardée: {filepath}")
@@ -500,6 +557,46 @@ class CatDetector:
         except Exception as e:
             logger.error(f"Erreur lors de la sauvegarde de l'image: {e}")
             return None
+    
+    async def clean_old_images(self):
+        """Supprime les anciennes images selon la politique de rétention"""
+        try:
+            # Calculer la date limite pour la rétention
+            retention_limit = datetime.now() - timedelta(days=self.retention_days)
+            retention_limit_timestamp = retention_limit.timestamp()
+            
+            # Trouver toutes les images dans le répertoire
+            image_files = []
+            for ext in ['jpg', 'jpeg', 'png']:
+                image_files.extend(glob.glob(str(self.images_dir / f'*.{ext}')))
+            
+            # Ignorer latest.jpg
+            image_files = [f for f in image_files if "latest.jpg" not in f]
+            
+            # Compter le nombre d'images avant nettoyage
+            images_count_before = len(image_files)
+            
+            # Vérifier chaque image
+            deleted_count = 0
+            for image_path in image_files:
+                # Obtenir la date de modification du fichier
+                file_timestamp = os.path.getmtime(image_path)
+                file_datetime = datetime.fromtimestamp(file_timestamp)
+                
+                # Supprimer si plus ancien que la limite de rétention
+                if file_timestamp < retention_limit_timestamp:
+                    try:
+                        os.remove(image_path)
+                        deleted_count += 1
+                    except Exception as e:
+                        logger.error(f"Erreur lors de la suppression de {image_path}: {e}")
+            
+            if deleted_count > 0:
+                logger.info(f"Nettoyage: {deleted_count} images supprimées (plus anciennes que {retention_limit.strftime('%d/%m/%Y')})")
+                logger.info(f"Images avant/après nettoyage: {images_count_before}/{images_count_before-deleted_count}")
+                
+        except Exception as e:
+            logger.error(f"Erreur lors du nettoyage des anciennes images: {e}")
     
     async def trigger_home_assistant_automation(self, automation_id):
         """Déclenche une automatisation dans Home Assistant"""
@@ -623,7 +720,8 @@ async def main():
             ai_connector=gemini_connector,
             save_images=SAVE_IMAGES,
             burst_count=BURST_COUNT,
-            burst_interval=BURST_INTERVAL
+            burst_interval=BURST_INTERVAL,
+            retention_days=RETENTION_DAYS
         )
         
         await detector.connect()

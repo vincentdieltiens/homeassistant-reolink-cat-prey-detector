@@ -1,6 +1,6 @@
 {
   "name": "Détecteur de Chat",
-  "version": "0.6",
+  "version": "0.7",
   "slug": "cat_detector",
   "description": "Détecte les chats qui entrent avec des proies",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
@@ -25,7 +25,8 @@
     "automation_with_prey": "",
     "automation_without_prey": "",
     "burst_count": 3,
-    "burst_interval": 0.3
+    "burst_interval": 0.3,
+    "retention_days": 7
   },
   "schema": {
     "camera_ip": "str",
@@ -36,7 +37,8 @@
     "automation_with_prey": "str?",
     "automation_without_prey": "str?",
     "burst_count": "int(1,10)",
-    "burst_interval": "float(0.1,1.0)"
+    "burst_interval": "float(0.1,1.0)",
+    "retention_days": "int(1,90)"
   },
   "ports": {
     "8099/tcp": 8099

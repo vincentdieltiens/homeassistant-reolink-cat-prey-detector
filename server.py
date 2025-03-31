@@ -189,6 +189,33 @@ HTML_TEMPLATE = """
             font-size: 14px;
             color: #666;
         }
+        .badge {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            text-align: center;
+            line-height: 24px;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        .view-all {
+            display: inline-block;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-top: 5px;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .view-all:hover {
+            background-color: #0b7dda;
+        }
     </style>
 </head>
 <body>
@@ -210,20 +237,25 @@ HTML_TEMPLATE = """
         <button class="refresh-btn" onclick="window.location.reload();">Rafraîchir</button>
         
         <div class="images-container">
-            {% if images %}
-                {% for image in images %}
+            {% if image_groups %}
+                {% for group in image_groups %}
                     <div class="image-card">
-                        <a href="{{ url_for('view_image', filename=image.filename) }}">
-                            <img src="{{ url_for('serve_image', filename=image.filename) }}" alt="Photo de chats">
+                        <a href="{{ url_for('view_image', filename=group['best_image']['filename']) }}">
+                            <img src="{{ url_for('serve_image', filename=group['best_image']['filename']) }}" alt="Photo de chat">
                         </a>
                         <div class="image-info">
-                            <p class="timestamp">{{ image.date }}</p>
-                            {% if 'cat_with_prey' in image.filename %}
+                            <p class="timestamp">{{ group['date'] }}</p>
+                            {% if group['detection_type'] == 'cat_with_prey' %}
                                 <p class="cat-with-prey">Chat avec proie</p>
-                            {% elif 'cat' in image.filename %}
+                            {% elif group['detection_type'] == 'cat' %}
                                 <p class="cat">Chat sans proie</p>
                             {% else %}
                                 <p>Mouvement détecté</p>
+                            {% endif %}
+                            {% if group['count'] > 1 %}
+                                <p>Images: <span class="badge">{{ group['count'] }}</span>
+                                <a href="{{ url_for('view_group', group_id=group['group_id']) }}" class="view-all">Voir toutes</a>
+                                </p>
                             {% endif %}
                         </div>
                     </div>
@@ -236,7 +268,7 @@ HTML_TEMPLATE = """
         </div>
         
         <div class="footer">
-            <p>Détecteur de Chat v0.2 - Addon Home Assistant</p>
+            <p>Détecteur de Chat v0.7 - Addon Home Assistant</p>
         </div>
     </div>
 </body>
@@ -339,6 +371,166 @@ VIEW_TEMPLATE = """
 </html>
 """
 
+# Template pour la vue d'un groupe d'images
+GROUP_VIEW_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vue du groupe - Détecteur de Chat</title>
+    <style>
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 0;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+        }
+        h1 {
+            margin: 0;
+            padding: 0 20px;
+            font-size: 24px;
+        }
+        .back-btn {
+            background-color: white;
+            color: #4CAF50;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-left: 20px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover {
+            background-color: #f1f1f1;
+        }
+        .images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .image-card {
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .image-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .image-card a {
+            display: block;
+        }
+        .image-card img {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+            display: block;
+        }
+        .image-info {
+            padding: 10px;
+        }
+        .image-info p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .timestamp {
+            color: #666;
+        }
+        .sequence {
+            color: #2196F3;
+            font-weight: bold;
+        }
+        .best-label {
+            background-color: #4CAF50;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .group-info {
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .cat-with-prey {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .cat {
+            color: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Séquence d'images</h1>
+        <a href="{{ url_for('index') }}" class="back-btn">Retour</a>
+    </header>
+    
+    <div class="container">
+        <div class="group-info">
+            <h2>{{ group['date'] }}</h2>
+            <p>
+                {% if group['detection_type'] == 'cat_with_prey' %}
+                    <span class="cat-with-prey">Chat avec proie</span>
+                {% elif group['detection_type'] == 'cat' %}
+                    <span class="cat">Chat sans proie</span>
+                {% else %}
+                    Mouvement détecté
+                {% endif %}
+            </p>
+            <p>Groupe: {{ group['group_id'] }}</p>
+            <p>{{ group['count'] }} images dans cette séquence</p>
+        </div>
+        
+        <div class="images-grid">
+            {% for image in group['images'] %}
+                <div class="image-card">
+                    <a href="{{ url_for('view_image', filename=image['filename']) }}">
+                        <img src="{{ url_for('serve_image', filename=image['filename']) }}" alt="Photo de chat">
+                    </a>
+                    <div class="image-info">
+                        <p class="sequence">
+                            Séquence: {{ image['sequence_index'] if image['sequence_index'] else 'N/A' }}
+                            {% if image['is_best'] %}
+                                <span class="best-label">Meilleure</span>
+                            {% endif %}
+                        </p>
+                        <p class="timestamp">{{ image['date'] }}</p>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>
+"""
+
 @app.route('/')
 def index():
     """Route principale affichant les images récentes"""
@@ -366,36 +558,116 @@ def index():
             # Chercher aussi dans le dossier captures local
             image_files.extend(glob.glob(os.path.join(LOCAL_CAPTURES_DIR, f'*.{ext}')))
         
+        # Ignorer l'image "latest.jpg"
+        image_files = [f for f in image_files if "latest.jpg" not in f]
+        
         # liste des images dans le logs
         logger.info(f"Images trouvées: {image_files}")
+        
         # Créer une liste d'objets image
         images = []
+        image_groups = {}  # Dictionnaire pour regrouper les images par group_id
+        
         for image_path in image_files:
-            if "latest.jpg" in image_path:
-                continue  # Ignorer l'image "latest.jpg"
-            
             filename = os.path.basename(image_path)
             timestamp = os.path.getmtime(image_path)
             date = time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(timestamp))
             
-            images.append({
+            # Extraire le group_id du nom de fichier
+            # Format attendu: type_best_groupid_seqX.jpg ou type_groupid_seqX.jpg
+            parts = os.path.splitext(filename)[0].split('_')
+            
+            # Traiter les différents formats possibles
+            group_id = None
+            is_best = False
+            sequence_index = None
+            detection_type = None
+            
+            # Format 1: type_best_groupid_seqX.jpg
+            if len(parts) >= 4 and 'best' in parts and any(p.startswith('seq') for p in parts):
+                detection_type = parts[0] if parts[0] in ['cat', 'cat_with_prey'] else None
+                is_best = 'best' in parts
+                
+                # Trouver le group_id (la partie avant seq)
+                seq_index = next((i for i, p in enumerate(parts) if p.startswith('seq')), None)
+                if seq_index is not None and seq_index > 0:
+                    group_id = parts[seq_index-1]
+                    sequence_index = parts[seq_index][3:]  # Extraire le numéro après 'seq'
+            
+            # Format 2: type_groupid_seqX.jpg
+            elif len(parts) >= 3 and any(p.startswith('seq') for p in parts):
+                detection_type = parts[0] if parts[0] in ['cat', 'cat_with_prey'] else None
+                
+                # Trouver le group_id (la partie avant seq)
+                seq_index = next((i for i, p in enumerate(parts) if p.startswith('seq')), None)
+                if seq_index is not None and seq_index > 0:
+                    group_id = parts[seq_index-1]
+                    sequence_index = parts[seq_index][3:]  # Extraire le numéro après 'seq'
+            
+            # Format 3: Pour l'ancien format (type_timestamp.jpg)
+            elif len(parts) == 2:
+                detection_type = parts[0] if parts[0] in ['cat', 'cat_with_prey'] else None
+                group_id = parts[1]  # Timestamp sert de group_id
+                is_best = True  # Considéré comme la meilleure image
+            
+            # Si group_id n'a pas été trouvé, utiliser le nom du fichier comme fallback
+            if not group_id:
+                group_id = os.path.splitext(filename)[0]
+                is_best = True  # Par défaut, considérer comme la meilleure image
+            
+            # Créer l'objet image
+            image_info = {
                 'filename': filename,
                 'date': date,
-                'timestamp': timestamp
-            })
+                'timestamp': timestamp,
+                'group_id': group_id,
+                'is_best': is_best,
+                'sequence_index': sequence_index,
+                'detection_type': detection_type
+            }
+            
+            # Ajouter l'image au groupe correspondant
+            if group_id not in image_groups:
+                image_groups[group_id] = []
+            image_groups[group_id].append(image_info)
+            
+            # Aussi l'ajouter à la liste complète
+            images.append(image_info)
         
-        # Trier les images par timestamp (plus récentes en premier)
-        images.sort(key=lambda x: x['timestamp'], reverse=True)
+        # Trier les images dans chaque groupe par timestamp
+        for group_id, group_images in image_groups.items():
+            group_images.sort(key=lambda x: int(x['sequence_index']) if x['sequence_index'] and x['sequence_index'].isdigit() else 0)
         
-        # Afficher au maximum les 50 dernières images
-        images = images[:50]
+        # Trier les groupes par timestamp (plus récents en premier)
+        # Utiliser le timestamp de la meilleure image ou de la première image du groupe
+        sorted_groups = []
+        for group_id, group_images in image_groups.items():
+            # Trouver la meilleure image du groupe
+            best_image = next((img for img in group_images if img['is_best']), group_images[0] if group_images else None)
+            
+            if best_image:
+                sorted_groups.append({
+                    'group_id': group_id,
+                    'images': group_images,
+                    'best_image': best_image,
+                    'timestamp': best_image['timestamp'],
+                    'date': best_image['date'],
+                    'detection_type': best_image['detection_type'],
+                    'count': len(group_images)
+                })
+        
+        # Trier les groupes par timestamp (plus récents en premier)
+        sorted_groups.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        # Limiter à 50 groupes maximum
+        sorted_groups = sorted_groups[:50]
         
         # Dernier horodatage de mise à jour
         last_updated = time.strftime('%d/%m/%Y %H:%M:%S', time.localtime())
         
         return render_template_string(
             HTML_TEMPLATE, 
-            images=images, 
+            image_groups=sorted_groups,
             last_updated=last_updated,
             burst_count=BURST_COUNT,
             burst_interval=BURST_INTERVAL
@@ -413,6 +685,86 @@ def view_image(filename):
         logger.info(f"[view_image] En-tête X-Ingress-Path trouvé: {ingress_path}")
     
     return render_template_string(VIEW_TEMPLATE, filename=filename)
+
+@app.route('/view_group/<group_id>')
+def view_group(group_id):
+    """Afficher toutes les images d'un groupe"""
+    try:
+        # Récupérer le préfixe d'ingress pour le logging
+        ingress_path = request.headers.get('X-Ingress-Path', '')
+        if ingress_path:
+            logger.info(f"[view_group] En-tête X-Ingress-Path trouvé: {ingress_path}")
+        
+        # Trouver toutes les images avec ce group_id
+        image_files = []
+        for ext in ['jpg', 'jpeg', 'png']:
+            for dir_path in [IMAGES_DIR, MEDIA_DIR, CAPTURES_DIR, OLD_IMAGES_DIR, LOCAL_CAPTURES_DIR]:
+                if dir_path:
+                    pattern = os.path.join(dir_path, f"*{group_id}*.{ext}")
+                    image_files.extend(glob.glob(pattern))
+        
+        # Créer la liste d'objets image pour ce groupe
+        group_images = []
+        
+        for image_path in image_files:
+            if "latest.jpg" in image_path:
+                continue
+                
+            filename = os.path.basename(image_path)
+            timestamp = os.path.getmtime(image_path)
+            date = time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(timestamp))
+            
+            # Déterminer si c'est la meilleure image
+            is_best = 'best' in filename
+            
+            # Essayer d'extraire l'index de séquence (seq0, seq1, etc.)
+            sequence_index = None
+            parts = os.path.splitext(filename)[0].split('_')
+            for part in parts:
+                if part.startswith('seq') and part[3:].isdigit():
+                    sequence_index = part[3:]
+                    break
+            
+            # Déterminer le type de détection
+            detection_type = None
+            if 'cat_with_prey' in filename:
+                detection_type = 'cat_with_prey'
+            elif 'cat_' in filename:
+                detection_type = 'cat'
+            
+            group_images.append({
+                'filename': filename,
+                'date': date,
+                'timestamp': timestamp,
+                'is_best': is_best,
+                'sequence_index': sequence_index,
+                'detection_type': detection_type
+            })
+        
+        # Trier les images par index de séquence
+        group_images.sort(key=lambda x: int(x['sequence_index']) if x['sequence_index'] and x['sequence_index'].isdigit() else 999)
+        
+        # Si aucune image trouvée
+        if not group_images:
+            return "Groupe non trouvé", 404
+        
+        # Trouver la meilleure image ou la première image
+        best_image = next((img for img in group_images if img['is_best']), group_images[0] if group_images else None)
+        
+        # Créer l'objet groupe
+        group = {
+            'group_id': group_id,
+            'images': group_images,
+            'best_image': best_image,
+            'date': best_image['date'] if best_image else '',
+            'detection_type': best_image['detection_type'] if best_image else None,
+            'count': len(group_images)
+        }
+        
+        return render_template_string(GROUP_VIEW_TEMPLATE, group=group)
+    except Exception as e:
+        logger.error(f"Erreur dans view_group(): {str(e)}")
+        return f"Erreur: {str(e)}", 500
 
 # Fonction utilitaire pour rechercher une image dans tous les dossiers possibles
 def find_image_path(filename):
